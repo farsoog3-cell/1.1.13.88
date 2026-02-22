@@ -1,94 +1,157 @@
 const http = require("http");
-const https = require("https");
-
 const PORT = process.env.PORT || 3000;
 
-let interval = null;
-let logs = [];
+let bots = [];
+let running = false;
 
-function ping(url) {
-  const start = Date.now();
+const locations = [
+  "🇹🇷 تركيا", "🇸🇦 السعودية", "🇪🇬 مصر",
+  "🇫🇷 فرنسا", "🇩🇪 ألمانيا",
+  "🇺🇸 أمريكا", "🇯🇵 اليابان", "🇧🇷 البرازيل"
+];
 
-  const lib = url.startsWith("https") ? https : http;
-
-  lib.get(url, res => {
-    const time = Date.now() - start;
-
-    logs.unshift({
-      url,
-      status: res.statusCode,
-      time: time + " ms",
-      date: new Date().toLocaleTimeString()
-    });
-
-    logs = logs.slice(0, 50);
-  }).on("error", () => {
-    logs.unshift({
-      url,
-      status: "Error",
-      time: "-",
-      date: new Date().toLocaleTimeString()
-    });
-  });
+function generateBot() {
+  return {
+    id: "BOT-" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+    name: "Agent_" + Math.floor(Math.random() * 9999),
+    location: locations[Math.floor(Math.random() * locations.length)],
+    status: Math.random() > 0.3 ? "🟢 Online" : "⚫ Offline",
+    time: new Date().toLocaleTimeString()
+  };
 }
 
 http.createServer((req, res) => {
 
-  const urlObj = new URL(req.url, "http://localhost");
+  const url = new URL(req.url, "http://localhost");
+  const count = parseInt(url.searchParams.get("n"));
 
-  // تشغيل
-  if (urlObj.pathname === "/start") {
-    const target = urlObj.searchParams.get("url");
-    const seconds = parseInt(urlObj.searchParams.get("t"));
-
-    if (interval) clearInterval(interval);
-
-    interval = setInterval(() => ping(target), seconds * 1000);
-
+  if (url.pathname === "/generate" && count > 0) {
+    for (let i = 0; i < count; i++) bots.unshift(generateBot());
     res.writeHead(302, { Location: "/" });
     return res.end();
   }
 
-  // إيقاف
-  if (urlObj.pathname === "/stop") {
-    clearInterval(interval);
-    interval = null;
-
+  if (url.pathname === "/clear") {
+    bots = [];
     res.writeHead(302, { Location: "/" });
     return res.end();
   }
+
+  if (url.pathname === "/start") running = true;
+  if (url.pathname === "/stop") running = false;
+
+  const online = bots.filter(b => b.status.includes("Online")).length;
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 
   res.end(`
-  <h1>📡 مراقبة الروابط</h1>
+  <html lang="ar">
+  <head>
+    <meta charset="UTF-8">
+    <title>Cyber Dashboard</title>
+    <style>
+      body { margin:0; font-family:Arial; background:#020617; color:#e5e7eb; }
 
-  <form action="/start">
-    رابط الموقع:<br>
-    <input name="url" placeholder="https://example.com" required><br><br>
+      header {
+        background:#020617;
+        padding:20px;
+        text-align:center;
+        font-size:28px;
+        border-bottom:2px solid #22c55e;
+      }
 
-    كل كم ثانية؟<br>
-    <input type="number" name="t" value="5" min="1" required><br><br>
+      .stats {
+        display:flex;
+        justify-content:center;
+        gap:20px;
+        margin:20px;
+        flex-wrap:wrap;
+      }
 
-    <button>تشغيل المراقبة</button>
-  </form>
+      .card {
+        background:#111827;
+        padding:15px;
+        border-radius:10px;
+        min-width:160px;
+        text-align:center;
+      }
 
-  <form action="/stop">
-    <button style="background:red;color:white;margin-top:10px">
-      إيقاف
-    </button>
-  </form>
+      .controls { text-align:center; margin:20px; }
 
-  <hr>
+      input, button {
+        padding:8px;
+        margin:4px;
+        border-radius:6px;
+        border:none;
+        font-size:16px;
+      }
 
-  <h2>النتائج</h2>
+      button { background:#22c55e; color:white; cursor:pointer; }
+      .danger { background:#ef4444; }
+      .blue { background:#3b82f6; }
 
-  ${logs.map(l => `
-    ⏰ ${l.date} |
-    🌐 ${l.url} |
-    📊 ${l.status} |
-    ⚡ ${l.time}<br>
-  `).join("")}
+      .bots {
+        display:flex;
+        flex-wrap:wrap;
+        justify-content:center;
+        gap:12px;
+        padding:20px;
+      }
+
+      .bot {
+        background:#111827;
+        padding:12px;
+        border-radius:10px;
+        width:260px;
+      }
+    </style>
+  </head>
+
+  <body>
+
+    <header>🧠 Cyber Control Panel</header>
+
+    <div class="stats">
+      <div class="card">إجمالي<br><b>${bots.length}</b></div>
+      <div class="card">Online<br><b>${online}</b></div>
+      <div class="card">Offline<br><b>${bots.length - online}</b></div>
+      <div class="card">الحالة<br><b>${running ? "🟢 Running" : "⏸️ Stopped"}</b></div>
+    </div>
+
+    <div class="controls">
+      <form action="/generate" style="display:inline;">
+        عدد:
+        <input type="number" name="n" min="1" max="500" value="5">
+        <button>إنشاء</button>
+      </form>
+
+      <form action="/start" style="display:inline;">
+        <button class="blue">تشغيل المحاكاة</button>
+      </form>
+
+      <form action="/stop" style="display:inline;">
+        <button class="danger">إيقاف</button>
+      </form>
+
+      <form action="/clear" style="display:inline;">
+        <button class="danger">حذف الكل</button>
+      </form>
+    </div>
+
+    <div class="bots">
+      ${bots.map(b => `
+        <div class="bot">
+          🤖 <b>${b.name}</b><br>
+          🆔 ${b.id}<br>
+          🌍 ${b.location}<br>
+          ${b.status}<br>
+          ⏱️ ${b.time}
+        </div>
+      `).join("")}
+    </div>
+
+  </body>
+  </html>
   `);
 
 }).listen(PORT);
